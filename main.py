@@ -18,7 +18,6 @@ def init_db():
     cursor = conn.cursor()
     cursor.execute('''CREATE TABLE IF NOT EXISTS orders 
                       (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, phone TEXT, quantity TEXT, status TEXT)''')
-    # approved: 0 - чекає, 1 - працівник, 2 - власник (Софія)
     cursor.execute('''CREATE TABLE IF NOT EXISTS workers (chat_id INTEGER PRIMARY KEY, username TEXT, approved INTEGER DEFAULT 0)''')
     
     # Твій доступ завжди активний (технічний адмін)
@@ -48,7 +47,6 @@ def tilda_webhook():
     db.commit()
     
     msg = f"📦 *Нове замовлення №{cursor.lastrowid}*\n👤 {data.get('Name')}\n📞 {data.get('Phone')}"
-    # Сповіщення всім, у кого approved > 0
     cursor.execute("SELECT chat_id FROM workers WHERE approved >= 1")
     for worker in cursor.fetchall():
         try: bot.send_message(worker[0], msg, parse_mode="Markdown")
@@ -59,19 +57,15 @@ def tilda_webhook():
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    # Звіт тобі про нового користувача
     if message.chat.id != ADMIN_ID:
         bot.send_message(ADMIN_ID, f"🎯 Хтось зайшов у бот!\nІм'я: {message.from_user.first_name}\nID: `{message.chat.id}`", parse_mode="Markdown")
-    
     bot.send_message(message.chat.id, "Вітаю в системі Пентагон! Введіть пароль доступу:")
 
 @bot.message_handler(commands=['admin'])
 def admin_list(message):
-    # Тільки ти або Софія (approved=2) бачите адмінку
     cursor = db.cursor()
     cursor.execute("SELECT approved FROM workers WHERE chat_id=?", (message.chat.id,))
     res = cursor.fetchone()
-    
     if message.chat.id == ADMIN_ID or (res and res[0] == 2):
         cursor.execute("SELECT chat_id, username FROM workers WHERE approved=1")
         workers = cursor.fetchall()
@@ -86,36 +80,31 @@ def admin_list(message):
 @bot.message_handler(func=lambda m: m.text in [AUTH_PASSWORD, MASTER_PASSWORD])
 def auth(message):
     cursor = db.cursor()
-    
-    # Логіка для Софії (Master-пароль)
     if message.text == MASTER_PASSWORD:
         cursor.execute("SELECT chat_id FROM workers WHERE approved=2")
         if cursor.fetchone():
             bot.send_message(message.chat.id, "❌ Майстер-пароль вже був використаний.")
             return
-        
         cursor.execute("INSERT OR REPLACE INTO workers (chat_id, username, approved) VALUES (?, ?, 2)", 
                        (message.chat.id, message.from_user.username, 2))
         db.commit()
         bot.send_message(message.chat.id, "👑 Ви зареєстровані як Власник! Тепер ви можете керувати командою через /admin.")
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True).add("📦 Мої замовлення")
-        bot.send_message(message.chat.id, "Ваше меню:", reply_markup=markup)
+        bot.send_message(message.chat.id, "Ваше меню:", reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("📦 Мої замовлення"))
         bot.send_message(ADMIN_ID, f"🔔 Софія (ID: {message.chat.id}) активувала доступ Власника.")
 
-    # Логіка для працівників
     elif message.text == AUTH_PASSWORD:
         user = message.from_user
-        # Відправляємо запит і тобі, і Софії (якщо вона вже є)
+        # ТУТ ДОДАНО КНОПКУ ВІДХИЛИТИ
+        kb = types.InlineKeyboardMarkup()
+        kb.row(
+            types.InlineKeyboardButton("✅ Дозволити", callback_data=f"appr_{message.chat.id}_{user.username}"),
+            types.InlineKeyboardButton("❌ Відхилити", callback_data=f"deny_{message.chat.id}")
+        )
         cursor.execute("SELECT chat_id FROM workers WHERE approved=2 OR chat_id=?", (ADMIN_ID,))
         admins = cursor.fetchall()
-        
-        kb = types.InlineKeyboardMarkup()
-        kb.add(types.InlineKeyboardButton("✅ Дозволити", callback_data=f"appr_{message.chat.id}_{user.username}"))
-        
         for adm in admins:
             try: bot.send_message(adm[0], f"🔔 *Запит на доступ!*\n@{user.username} (ID: {message.chat.id})", parse_mode="Markdown", reply_markup=kb)
             except: pass
-        
         bot.send_message(message.chat.id, "⏳ Пароль вірний. Очікуйте підтвердження від адміністрації.")
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -127,6 +116,13 @@ def callbacks(call):
         db.commit()
         bot.send_message(uid, "🎉 Доступ надано!", reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("📦 Мої замовлення"))
         bot.edit_message_text(f"✅ @{uname} доданий", call.message.chat.id, call.message.message_id)
+
+    # ОБРОБКА КНОПКИ ВІДХИЛИТИ
+    elif call.data.startswith('deny_'):
+        uid = call.data.split('_')[1]
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+        try: bot.send_message(uid, "🚫 Вам відмовлено у доступі.")
+        except: pass
 
     elif call.data.startswith('fire_'):
         uid = call.data.split('_')[1]
