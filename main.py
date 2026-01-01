@@ -6,7 +6,7 @@ import os
 
 # --- НАЛАШТУВАННЯ ---
 # ВАЖЛИВО: Отримай новий токен через /revoke у @BotFather!
-TOKEN = 'ТВІЙ_НОВИЙ_ТОКЕН_ТУТ' 
+TOKEN = '7966376299:AAFXhIYp7msvOSiLI7Ve1BdrOX74JMJlZoM' 
 AUTH_PASSWORD = 'pentagon2025'
 app = Flask(__name__)
 bot = telebot.TeleBot(TOKEN)
