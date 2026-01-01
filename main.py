@@ -117,8 +117,5 @@ def update_status(call):
     bot.answer_callback_query(call.id, f"Статус змінено на {new_status}")
     bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, 
                           text=f"✅ Замовлення №{order_id} переведено в: {new_status}")
-
 if __name__ == "__main__":
-    import threading
-    threading.Thread(target=bot.infinity_polling).start()
     app.run(host="0.0.0.0", port=5000)
