@@ -55,7 +55,7 @@ def tilda_webhook():
     quantity = data.get('quantity', '1 шт')
 
     cursor = db.cursor()
-    cursor.execute("INSERT INTO orders (name, phone, quantity, status) VALUES (?, ?, ?, 'Активне')", 
+    cursor.execute("INSERT INTO orders (name, phone, quantity, status) VALUES (?, ?, ?, 'Активні')", 
                    (name, phone, quantity))
     db.commit()
     order_id = cursor.lastrowid
